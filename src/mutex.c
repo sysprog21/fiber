@@ -62,9 +62,9 @@ int fiber_mutex_unlock(fiber_mutex_t *mtx)
     /* get the wait queue tail index, the task must be woke up was put on there
      */
     uint32_t index = ((value >> 32) - len) & MUTEX_WAIT_QUEUE_INDEX_MASK;
-    while (mtx->wait_queue[index] == NULL) {
+    /* FIXME: do not depend on usleep */
+    while (!mtx->wait_queue[index])
         usleep(1);
-    }
 
     /* remove the task from the wait queue */
     task_t *waked_task = mtx->wait_queue[index];
@@ -75,5 +75,6 @@ int fiber_mutex_unlock(fiber_mutex_t *mtx)
     uint16_t pos = __sync_fetch_and_add(&sch->head, 1) & (sch->size - 1);
     sch->tasks[pos] = waked_task;
     sem_post(&sch->sem_used);
+
     return 0;
 }

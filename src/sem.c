@@ -65,9 +65,9 @@ int fiber_sem_post(fiber_sem_t *sem)
     /* get the wait queue tail index, the task must be woke up was put on there
      */
     uint32_t index = ((value >> 32) - val - 1) & SEM_WAIT_QUEUE_INDEX_MASK;
-    while (sem->wait_queue[index] == NULL) {
+    /* FIXME: do not depend on usleep */
+    while (!sem->wait_queue[index])
         usleep(1);
-    }
 
     /* remove the task from the wait queue */
     task_t *waked_task = sem->wait_queue[index];

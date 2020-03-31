@@ -12,6 +12,7 @@ int fiber_cond_init(fiber_cond_t *cond)
 {
     if (!cond)
         return -1;
+
     cond->value = 0;
     cond->wait_queue = calloc(COND_WAIT_QUEUE_SIZE, sizeof(task_t *));
     return 0;
@@ -19,9 +20,9 @@ int fiber_cond_init(fiber_cond_t *cond)
 
 int fiber_cond_destroy(fiber_cond_t *cond)
 {
-    if (!cond || (cond->value & COND_WAIT_QUEUE_LEN_MASK) != 0) {
+    if (!cond || (cond->value & COND_WAIT_QUEUE_LEN_MASK) != 0)
         return -1;
-    }
+
     free(cond->wait_queue);
     cond->value = 0;
     cond->wait_queue = NULL;
@@ -70,9 +71,9 @@ int fiber_cond_signal(fiber_cond_t *cond)
     /* get the wait queue tail index, the task must be woke up was put on there
      */
     uint32_t index = ((value >> 32) - len) & COND_WAIT_QUEUE_INDEX_MASK;
-    while (cond->wait_queue[index] == NULL) {
+    /* FIXME: do not depend on usleep */
+    while (!cond->wait_queue[index])
         usleep(1);
-    }
 
     /* remove the task from the wait queue */
     task_t *waked_task = cond->wait_queue[index];
@@ -96,9 +97,9 @@ int fiber_cond_broadcast(fiber_cond_t *cond)
     size_t i;
     for (i = 0; i < len; ++i) {
         uint32_t index = (first_index + i) & COND_WAIT_QUEUE_INDEX_MASK;
-        while (cond->wait_queue[index] == NULL) {
+	/* FIXME: do not depend on usleep */
+        while (!cond->wait_queue[index])
             usleep(1);
-        }
 
         /* remove the task from the wait queue */
         task_t *waked_task = cond->wait_queue[index];
