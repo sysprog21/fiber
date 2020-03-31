@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+
 #include "fiber_cond.h"
 
 static fiber_mutex_t mtx;
@@ -46,10 +48,14 @@ int main()
     fiber_cond_init(&cond);
 
     pool_t *pl = create_pool(1);
+    if (!pl)
+        exit(-1);
     add_task(pl, create_task(func1, NULL));
     add_task(pl, create_task(func2, NULL));
     free_pool(pl);
 
     fiber_cond_destroy(&cond);
     fiber_mutex_destroy(&mtx);
+
+    return 0;
 }

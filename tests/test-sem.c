@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+
 #include "fiber_sem.h"
 
 static fiber_sem_t sem;
@@ -29,6 +31,8 @@ int main()
 {
     fiber_sem_init(&sem, 0);
     pool_t *pl = create_pool(4);
+    if (!pl)
+        exit(-1);
 
     for (int i = 0; i < 256; ++i) {
         add_task(pl, create_task(consumer_func, NULL));
@@ -37,4 +41,6 @@ int main()
 
     free_pool(pl);
     fiber_sem_destroy(&sem);
+
+    return 0;
 }
