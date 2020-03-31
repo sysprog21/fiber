@@ -52,7 +52,6 @@ pool_t *create_pool(int thread_nums)
     pool_t *pl = calloc(1, sizeof(pool_t));
     pl->size = tnums;
     pl->threads = calloc(tnums, sizeof(schedule_t *));
-    pl->blocked_io_set = calloc(TASK_LIMIT, sizeof(task_t *));
 
     uint32_t qsize = TASK_LIMIT / tnums;
     for (int i = 0; i < tnums; ++i) {
@@ -79,7 +78,6 @@ void free_pool(pool_t *pool)
         free(sch);
     }
     free(pool->threads);
-    free(pool->blocked_io_set);
     free(pool);
 }
 
@@ -197,16 +195,6 @@ int suspend_task(task_t *task)
     return 0;
 }
 
-int suspend_fd(task_t *task, int fd)
-{
-    if (!task || fd < 0)
-        return -1;
-
-    suspend_task(task);
-    task->sch->mpool->blocked_io_set[fd] = task;
-    return 0;
-}
-
 int wake_task(task_t *task)
 {
     if (!task)
@@ -218,12 +206,4 @@ int wake_task(task_t *task)
     sch->tasks[index] = task;
     sem_post(&sch->sem_used);
     return 0;
-}
-
-int wake_fd(pool_t *pool, int fd)
-{
-    if (!pool || fd < 0)
-        return -1;
-
-    return wake_task(pool->blocked_io_set[fd]);
 }

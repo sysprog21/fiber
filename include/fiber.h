@@ -51,7 +51,6 @@ typedef struct pool {
     int epoll_fd;
     pthread_t main_tid;
     schedule_t **threads;
-    task_t **blocked_io_set;
 } pool_t;
 
 pool_t *create_pool(int thread_num);
@@ -67,9 +66,5 @@ int suspend_task(task_t *tsk);
 int yield_task(task_t *tsk);
 
 int wake_task(task_t *task);
-
-int suspend_fd(task_t *task, int fd);
-
-int wake_fd(pool_t *pl, int fd);
 
 #endif
