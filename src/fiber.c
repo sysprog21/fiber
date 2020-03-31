@@ -55,9 +55,8 @@ pool_t *create_pool(int thread_nums)
     pl->blocked_io_set = calloc(TASK_LIMIT, sizeof(task_t *));
 
     uint32_t qsize = TASK_LIMIT / tnums;
-    schedule_t *sch;
     for (int i = 0; i < tnums; ++i) {
-        sch = calloc(1, sizeof(schedule_t));
+        schedule_t *sch = calloc(1, sizeof(schedule_t));
         sch->size = qsize;
         sch->tasks = calloc(qsize, sizeof(task_t *));
         sem_init(&sch->sem_used, 0, 0);
@@ -87,7 +86,6 @@ void free_pool(pool_t *pool)
 static void *schedule_run(void *arg)
 {
     schedule_t *sch = (schedule_t *) arg;
-    task_t *task;
 
     while (1) {
         sem_wait(&sch->sem_used);
@@ -95,7 +93,7 @@ static void *schedule_run(void *arg)
         while (!sch->tasks[sch->tail])
             usleep(1);
         while (sch->tasks[sch->tail]) {
-            task = sch->tasks[sch->tail];
+            task_t *task = sch->tasks[sch->tail];
             switch (task->status) {
             case READY:
                 getcontext(&task->ctx);
@@ -122,6 +120,7 @@ int remove_task(task_t *task)
 {
     if (!task)
         return -1;
+
     schedule_t *sch = task->sch;
     sch->tasks[sch->tail] = NULL;
     sem_post(&sch->sem_free);

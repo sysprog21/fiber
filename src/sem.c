@@ -13,6 +13,7 @@ int fiber_sem_init(fiber_sem_t *sem, int value)
 {
     if (!sem || value < 0 || value >= SEM_VALUE_MAX)
         return -1;
+
     uint64_t tval = SEM_VALUE_MAX - value;
     sem->value = (tval << 32) + tval;
     sem->wait_queue = calloc(SEM_WAIT_QUEUE_SIZE, sizeof(task_t *));
@@ -23,6 +24,7 @@ int fiber_sem_destroy(fiber_sem_t *sem)
 {
     if (!sem || (sem->value & SEM_VALUE_MASK) != SEM_VALUE_MAX)
         return -1;
+
     free(sem->wait_queue);
     sem->value = 0;
     sem->wait_queue = NULL;

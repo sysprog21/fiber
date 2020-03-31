@@ -97,7 +97,7 @@ int fiber_cond_broadcast(fiber_cond_t *cond)
     size_t i;
     for (i = 0; i < len; ++i) {
         uint32_t index = (first_index + i) & COND_WAIT_QUEUE_INDEX_MASK;
-	/* FIXME: do not depend on usleep */
+        /* FIXME: do not depend on usleep */
         while (!cond->wait_queue[index])
             usleep(1);
 

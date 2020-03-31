@@ -12,6 +12,7 @@ int fiber_mutex_init(fiber_mutex_t *mtx)
 {
     if (!mtx)
         return -1;
+
     mtx->value = 0;
     mtx->wait_queue = calloc(MUTEX_WAIT_QUEUE_SIZE, sizeof(task_t *));
     return 0;
@@ -19,9 +20,9 @@ int fiber_mutex_init(fiber_mutex_t *mtx)
 
 int fiber_mutex_destroy(fiber_mutex_t *mtx)
 {
-    if (!mtx || (mtx->value & MUTEX_WAIT_QUEUE_LEN_MASK) != 0) {
+    if (!mtx || (mtx->value & MUTEX_WAIT_QUEUE_LEN_MASK))
         return -1;
-    }
+
     free(mtx->wait_queue);
     mtx->value = 0;
     mtx->wait_queue = NULL;

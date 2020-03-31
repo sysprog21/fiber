@@ -7,10 +7,9 @@ static int g_val_array[8];
 static void func(task_t *fiber, void *data)
 {
     (void) data;
-    int i, j;
-    for (i = 0; i < 64; ++i) {
+    for (int i = 0; i < 64; ++i) {
         fiber_mutex_lock(fiber, &mtx);
-        for (j = 0; j < 8; ++j)
+        for (int j = 0; j < 8; ++j)
             printf("%d ", ++g_val_array[j]);
         printf("\n");
         fiber_mutex_unlock(&mtx);
