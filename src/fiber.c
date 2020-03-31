@@ -8,6 +8,11 @@
 
 static void *schedule_run(void *arg);
 
+/* TODO: invoke clone() system call to create a light weight process.
+ * sample usage:
+ *   *tid = clone((int (*)(void*)) start_func, (char*) stack + _THREAD_STACK,
+ *                SIGCHLD | CLONE_SIGHAND | CLONE_VM | CLONE_PTRACE, arg);
+ */
 static inline void open_pool(pool_t *pl)
 {
     for (size_t i = 0; i < pl->size; ++i)
@@ -35,7 +40,6 @@ static void close_pool(pool_t *pl)
         pthread_join(pl->threads[i]->tid, NULL);
     }
 }
-
 
 pool_t *create_pool(int thread_nums)
 {
