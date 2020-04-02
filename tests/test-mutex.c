@@ -1,16 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "fiber_mutex.h"
+#include "fiber.h"
 
 static fiber_mutex_t mtx;
 static int g_val_array[8];
 
-static void func(task_t *fiber, void *data)
+static void func(void *data)
 {
     (void) data;
     for (int i = 0; i < 64; ++i) {
-        fiber_mutex_lock(fiber, &mtx);
+        fiber_mutex_lock(&mtx);
         for (int j = 0; j < 8; ++j)
             printf("%d ", ++g_val_array[j]);
         printf("\n");
@@ -20,16 +20,14 @@ static void func(task_t *fiber, void *data)
 
 int main()
 {
+    fiber_init(1);
     fiber_mutex_init(&mtx);
-    pool_t *pl = create_pool(4);
-    if (!pl)
-        exit(-1);
 
-    for (int i = 0; i < 1024; ++i)
-        add_task(pl, create_task(func, NULL));
+    fiber_t thread[16];
+    for (int i = 0; i < 16; ++i)
+        fiber_create(&thread[i], &func, NULL);
 
-    free_pool(pl);
     fiber_mutex_destroy(&mtx);
-
+    fiber_destroy();
     return 0;
 }

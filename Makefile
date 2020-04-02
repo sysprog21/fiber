@@ -1,7 +1,7 @@
 TESTS = \
-	sem \
-	mutex \
-	cond
+    yield \
+    mutex \
+    cond
 TESTS := $(addprefix tests/test-,$(TESTS))
 deps := $(TESTS:%=%.o.d)
 
@@ -29,10 +29,7 @@ $(TESTS_OK): %.ok: %
 	$(Q)$(CC) -o $@ $(CFLAGS) -c -MMD -MF $@.d $<
 
 OBJS = \
-       src/fiber.o \
-       src/sem.o \
-       src/mutex.o \
-       src/cond.o
+       src/fiber.o
 deps += $(OBJS:%.o=%.o.d)
 
 $(TESTS): %: %.o $(OBJS)

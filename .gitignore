@@ -3,4 +3,4 @@
 tests/*.ok
 tests/test-cond
 tests/test-mutex
-tests/test-sem
+tests/test-yield

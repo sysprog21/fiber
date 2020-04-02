@@ -1,70 +1,83 @@
-#ifndef __FIBER_H
-#define __FIBER_H
+#ifndef FIBER_H
+#define FIBER_H
 
-#include <pthread.h>
-#include <semaphore.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <ucontext.h>
 
-#define STACK_SIZE (4096 * 32)
+typedef uint fiber_t;
 
-enum TASK_STATUS {
-    READY = 0,
-    RUNABLE = 1,
-    RUNNING = 2,
-    SUSPEND = 3,
-    DEAD = 4,
-};
+/* Task Linked List */
+typedef struct list_node {
+    struct list_node *next, *prev;
+} list_node;
 
-typedef struct task {
-    void (*entry)(struct task *);
+/* Fiber status */
+typedef enum {
+    NOT_STARTED = 0,
+    RUNNING,
+    SUSPENDED,
+    TERMINATED,
+    FINISHED,
+} fiber_status;
 
-    void (*func)(struct task *, void *);
+typedef enum {
+    RR = 0,
+    MLFQ, /* multi-level feedback queue */
+} fiber_sched_policy;
 
-    void *arg;
-    int status;
-    char stack[STACK_SIZE];
-    ucontext_t ctx;
-    struct schedule *sch;
-} task_t;
+/* user_level Thread Control Block (TCB) */
+typedef struct _tcb_internal _tcb;
 
-typedef struct schedule {
-    bool stop;
-    sem_t sem_done;
-    sem_t sem_free;
-    sem_t sem_used;
-    volatile size_t head;
-    size_t tail;
-    size_t size;
-    task_t **tasks;
-    task_t *running;
-    struct pool *mpool;
-    pthread_t tid;
-    ucontext_t mctx;
-} schedule_t;
+typedef struct {
+    _tcb *owner;
+    uint lock;
+    list_node wait_list;
+} fiber_mutex_t;
 
-typedef struct pool {
-    bool stop;
-    size_t size;
-    size_t index;
-    int epoll_fd;
-    pthread_t main_tid;
-    schedule_t **threads;
-} pool_t;
+typedef struct {
+    list_node wait_list;
+    fiber_mutex_t list_mutex;
+} fiber_cond_t;
 
-pool_t *create_pool(int thread_num);
+int fiber_init(int num);
+void fiber_destroy(void);
 
-void free_pool(pool_t *pl);
+/* create a new thread */
+int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg);
 
-task_t *create_task(void (*func)(task_t *, void *), void *arg);
+/* give CPU pocession to other user level threads voluntarily */
+int fiber_yield();
 
-int add_task(pool_t *pl, task_t *tsk);
+/* wait for thread termination */
+int fiber_join(fiber_t thread, void **value_ptr);
 
-int suspend_task(task_t *tsk);
+/* terminate a thread */
+void fiber_exit(void *retval);
 
-int yield_task(task_t *tsk);
+/* initial the mutex lock */
+int fiber_mutex_init(fiber_mutex_t *mutex);
 
-int wake_task(task_t *task);
+/* acquire the mutex lock */
+int fiber_mutex_lock(fiber_mutex_t *mutex);
+
+/* release the mutex lock */
+int fiber_mutex_unlock(fiber_mutex_t *mutex);
+
+/* destory the mutex lock */
+int fiber_mutex_destroy(fiber_mutex_t *mutex);
+
+/* initialize condition variable */
+int fiber_cond_init(fiber_cond_t *condvar);
+
+/* wake up all threads on waiting list */
+int fiber_cond_broadcast(fiber_cond_t *condvar);
+
+/* wake up a thread on waiting list */
+int fiber_cond_signal(fiber_cond_t *condvar);
+
+/* current thread go to sleep until other thread wakes it up */
+int fiber_cond_wait(fiber_cond_t *condvar, fiber_mutex_t *mutex);
+
+/* destory condition variable */
+int fiber_cond_destroy(fiber_cond_t *condvar);
 
 #endif
