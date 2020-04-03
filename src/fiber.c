@@ -195,11 +195,11 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
                 start_func, arg, thread);
 
     /* add newly created thread to the user level thread run queue */
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
     enqueue(thread_queue + thread->priority, &thread->node);
-    __sync_lock_release(&_spinlock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     return 0;
 }
@@ -209,18 +209,18 @@ int fiber_yield()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
     _tcb *cur_tcb = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
     if (RUNNING == cur_tcb->status) {
         cur_tcb->status = SUSPENDED;
         enqueue(thread_queue + cur_tcb->priority,
                 currefiber_node[k_tid & K_CONTEXT_MASK]);
-        __sync_lock_release(&_spinlock);
+        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
         swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
     } else
-        __sync_lock_release(&_spinlock);
+        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
     return 0;
 }
 
@@ -251,11 +251,11 @@ void fiber_exit(void *retval)
         (unsigned long *) malloc(sizeof(unsigned long));
     memcpy(sigsem_thread[currefiber_id].val, retval, sizeof(unsigned long));
 
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
     enqueue(thread_queue + cur_tcb->priority,
             currefiber_node[k_tid & K_CONTEXT_MASK]);
-    __sync_lock_release(&_spinlock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -266,7 +266,7 @@ static void schedule()
     uint k_tid = (uint) syscall(SYS_gettid);
     _tcb *cur_tcb = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
 
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
     cur_tcb->status = SUSPENDED;
@@ -277,7 +277,7 @@ static void schedule()
     enqueue(thread_queue + cur_tcb->priority,
             currefiber_node[k_tid & K_CONTEXT_MASK]);
 
-    __sync_lock_release(&_spinlock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -299,12 +299,12 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     u_thread->context.uc_link = &context_main[k_tid & K_CONTEXT_MASK];
 
     /* When this thread finished, delete TCB and yield CPU control */
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
     enqueue(thread_queue + u_thread->priority,
             currefiber_node[k_tid & K_CONTEXT_MASK]);
 
-    __sync_lock_release(&_spinlock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     swapcontext(&u_thread->context, &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -330,16 +330,16 @@ static void k_thread_exec_func(void *arg)
      * until no available user level thread
      */
     while (1) {
-        while (__sync_lock_test_and_set(&_spinlock, 1))
+        while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
             ;
 
         if (!dequeue(thread_queue, &run_node)) {
-            __sync_lock_release(&_spinlock);
+            __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
             setitimer(ITIMER_PROF, &zero_timer, &time_quantum);
             return;
         }
-        __sync_lock_release(&_spinlock);
+        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
         run_tcb = GET_TCB(run_node);
 
@@ -380,7 +380,7 @@ int fiber_mutex_lock(fiber_mutex_t *mutex)
 {
     uint k_tid = (uint) syscall(SYS_gettid);
     /* Use "test-and-set" atomic operation to acquire the mutex lock */
-    while (__sync_lock_test_and_set(&mutex->lock, 1)) {
+    while (__atomic_test_and_set(&mutex->lock, __ATOMIC_ACQUIRE)) {
         enqueue(&mutex->wait_list, currefiber_node[k_tid & K_CONTEXT_MASK]);
         swapcontext(
             &(GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK])->context),
@@ -397,17 +397,17 @@ int fiber_mutex_unlock(fiber_mutex_t *mutex)
     list_node *next_node = NULL;
     _tcb *cur_tcb = NULL;
     if (!dequeue(&(mutex->wait_list), &next_node)) {
-        __sync_lock_release(&mutex->lock);
+        __atomic_store_n(&mutex->lock, 0, __ATOMIC_RELEASE);
         mutex->owner = NULL;
         return 0;
     }
     cur_tcb = GET_TCB(next_node);
     cur_tcb->priority = 0;
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
     enqueue(thread_queue + cur_tcb->priority, next_node);
-    __sync_lock_release(&_spinlock);
-    __sync_lock_release(&mutex->lock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&mutex->lock, 0, __ATOMIC_RELEASE);
     mutex->owner = NULL;
     return 0;
 }
@@ -439,10 +439,10 @@ int fiber_cond_broadcast(fiber_cond_t *condvar)
     while (!dequeue(&(condvar->wait_list), &next_node)) {
         cur_tcb = GET_TCB(next_node);
         cur_tcb->priority = 0;
-        while (__sync_lock_test_and_set(&_spinlock, 1))
+        while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
             ;
         enqueue(thread_queue + cur_tcb->priority, next_node);
-        __sync_lock_release(&_spinlock);
+        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
     }
     return 0;
 }
@@ -457,10 +457,10 @@ int fiber_cond_signal(fiber_cond_t *condvar)
 
     cur_tcb = GET_TCB(next_node);
     cur_tcb->priority = 0;
-    while (__sync_lock_test_and_set(&_spinlock, 1))
+    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
     enqueue(thread_queue + cur_tcb->priority, next_node);
-    __sync_lock_release(&_spinlock);
+    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     return 0;
 }
