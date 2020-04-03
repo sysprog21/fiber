@@ -267,6 +267,7 @@ static void schedule()
 
     cur_tcb->status = SUSPENDED;
 
+    /* FIXME: Multilevel Feedback Queues (MLFQ) is broken */
     if (MLFQ == sched && cur_tcb->prio < PRIORITY - 1)
         ++cur_tcb->prio;
 
