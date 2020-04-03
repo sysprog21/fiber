@@ -28,7 +28,7 @@ static void test_yield(void *arg)
     fprintf(stdout, "User Level Thread \"%s\" finish !\n", t_name);
 }
 
-static void parallel_calculate(void *arg)
+static void calc(void *arg)
 {
     char *t_name = (char *) arg;
     int row = atoi(t_name) - 1;
@@ -82,8 +82,8 @@ int main()
 
     fiber_create(&u1, &test_yield, "1");
     fiber_create(&u2, &test_yield, "2");
-    fiber_create(&u3, &parallel_calculate, "3");
-    fiber_create(&u4, &parallel_calculate, "4");
+    fiber_create(&u3, &calc, "3");
+    fiber_create(&u4, &calc, "4");
 
     fprintf(stdout, "Main Thread Starts !\n");
 
