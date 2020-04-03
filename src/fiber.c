@@ -29,7 +29,7 @@ struct _tcb_internal {
     fiber_t tid;         /* thread ID            */
     fiber_status status; /* thread status        */
     ucontext_t context;  /* thread contex        */
-    uint priority;       /* thread priority      */
+    uint prio;           /* thread priority      */
     list_node node;      /* thread node in Queue */
     char stack[1];       /* thread stack pointer */
 };
@@ -41,7 +41,7 @@ struct _tcb_internal {
 static list_node thread_queue[PRIORITY];
 
 /* current user-level thread context */
-static list_node *currefiber_node[K_THREAD_MAX];
+static list_node *cur_thread_node[K_THREAD_MAX];
 
 /* kernel thread context */
 static ucontext_t context_main[K_THREAD_MAX];
@@ -164,7 +164,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     *tid = thread->tid;
 
     /* set initial priority to be the highest */
-    thread->priority = 0;
+    thread->prio = 0;
 
     /* set node in thread run queue */
     thread->node.next = NULL;
@@ -194,7 +194,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
-    enqueue(thread_queue + thread->priority, &thread->node);
+    enqueue(thread_queue + thread->prio, &thread->node);
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     return 0;
@@ -204,14 +204,14 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
 int fiber_yield()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
-    _tcb *cur_tcb = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
+    _tcb *cur_tcb = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
     if (RUNNING == cur_tcb->status) {
         cur_tcb->status = SUSPENDED;
-        enqueue(thread_queue + cur_tcb->priority,
-                currefiber_node[k_tid & K_CONTEXT_MASK]);
+        enqueue(thread_queue + cur_tcb->prio,
+                cur_thread_node[k_tid & K_CONTEXT_MASK]);
         __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
         swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
@@ -236,7 +236,7 @@ int fiber_join(fiber_t thread, void **value_ptr)
 void fiber_exit(void *retval)
 {
     uint k_tid = (uint) syscall(SYS_gettid);
-    _tcb *cur_tcb = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
+    _tcb *cur_tcb = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
     fiber_t currefiber_id = cur_tcb->tid;
 
     cur_tcb->status = TERMINATED;
@@ -249,8 +249,8 @@ void fiber_exit(void *retval)
 
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
-    enqueue(thread_queue + cur_tcb->priority,
-            currefiber_node[k_tid & K_CONTEXT_MASK]);
+    enqueue(thread_queue + cur_tcb->prio,
+            cur_thread_node[k_tid & K_CONTEXT_MASK]);
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
@@ -260,18 +260,18 @@ void fiber_exit(void *retval)
 static void schedule()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
-    _tcb *cur_tcb = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
+    _tcb *cur_tcb = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
     cur_tcb->status = SUSPENDED;
 
-    if (MLFQ == sched && cur_tcb->priority < PRIORITY - 1)
-        ++cur_tcb->priority;
+    if (MLFQ == sched && cur_tcb->prio < PRIORITY - 1)
+        ++cur_tcb->prio;
 
-    enqueue(thread_queue + cur_tcb->priority,
-            currefiber_node[k_tid & K_CONTEXT_MASK]);
+    enqueue(thread_queue + cur_tcb->prio,
+            cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
@@ -297,8 +297,8 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     /* When this thread finished, delete TCB and yield CPU control */
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
-    enqueue(thread_queue + u_thread->priority,
-            currefiber_node[k_tid & K_CONTEXT_MASK]);
+    enqueue(thread_queue + u_thread->prio,
+            cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
@@ -347,8 +347,8 @@ static void k_thread_exec_func(void *arg)
          */
         if (TERMINATED == run_tcb->status || FINISHED == run_tcb->status) {
             /* do V() in thread semaphore implies that current user-level
-	     * thread is done.
-	     */
+             * thread is done.
+             */
             sem_post(&(sigsem_thread[run_tcb->tid].semaphore));
             free(run_tcb);
             user_thread_num--;
@@ -356,7 +356,7 @@ static void k_thread_exec_func(void *arg)
         }
 
         run_tcb->status = RUNNING;
-        currefiber_node[k_tid & K_CONTEXT_MASK] = run_node;
+        cur_thread_node[k_tid & K_CONTEXT_MASK] = run_node;
         swapcontext(&context_main[k_tid & K_CONTEXT_MASK], &(run_tcb->context));
     }
 }
@@ -379,12 +379,12 @@ int fiber_mutex_lock(fiber_mutex_t *mutex)
     uint k_tid = (uint) syscall(SYS_gettid);
     /* Use "test-and-set" atomic operation to acquire the mutex lock */
     while (__atomic_test_and_set(&mutex->lock, __ATOMIC_ACQUIRE)) {
-        enqueue(&mutex->wait_list, currefiber_node[k_tid & K_CONTEXT_MASK]);
+        enqueue(&mutex->wait_list, cur_thread_node[k_tid & K_CONTEXT_MASK]);
         swapcontext(
-            &(GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK])->context),
+            &(GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK])->context),
             &context_main[k_tid & K_CONTEXT_MASK]);
     }
-    mutex->owner = GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK]);
+    mutex->owner = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
     return 0;
 }
@@ -400,10 +400,10 @@ int fiber_mutex_unlock(fiber_mutex_t *mutex)
         return 0;
     }
     cur_tcb = GET_TCB(next_node);
-    cur_tcb->priority = 0;
+    cur_tcb->prio = 0;
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
-    enqueue(thread_queue + cur_tcb->priority, next_node);
+    enqueue(thread_queue + cur_tcb->prio, next_node);
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&mutex->lock, 0, __ATOMIC_RELEASE);
     mutex->owner = NULL;
@@ -434,10 +434,10 @@ int fiber_cond_broadcast(fiber_cond_t *condvar)
     _tcb *cur_tcb = NULL;
     while (!dequeue(&(condvar->wait_list), &next_node)) {
         cur_tcb = GET_TCB(next_node);
-        cur_tcb->priority = 0;
+        cur_tcb->prio = 0;
         while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
             ;
-        enqueue(thread_queue + cur_tcb->priority, next_node);
+        enqueue(thread_queue + cur_tcb->prio, next_node);
         __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
     }
     return 0;
@@ -452,10 +452,10 @@ int fiber_cond_signal(fiber_cond_t *condvar)
         return 0;
 
     cur_tcb = GET_TCB(next_node);
-    cur_tcb->priority = 0;
+    cur_tcb->prio = 0;
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
-    enqueue(thread_queue + cur_tcb->priority, next_node);
+    enqueue(thread_queue + cur_tcb->prio, next_node);
     __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
 
     return 0;
@@ -466,11 +466,11 @@ int fiber_cond_wait(fiber_cond_t *condvar, fiber_mutex_t *mutex)
 {
     uint k_tid = (uint) syscall(SYS_gettid);
 
-    list_node *node = currefiber_node[k_tid & K_CONTEXT_MASK];
+    list_node *node = cur_thread_node[k_tid & K_CONTEXT_MASK];
     enqueue(&condvar->wait_list, node);
 
     fiber_mutex_unlock(mutex);
-    swapcontext(&(GET_TCB(currefiber_node[k_tid & K_CONTEXT_MASK])->context),
+    swapcontext(&(GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK])->context),
                 &context_main[k_tid & K_CONTEXT_MASK]);
     fiber_mutex_lock(mutex);
 
