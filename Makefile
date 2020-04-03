@@ -1,4 +1,5 @@
 TESTS = \
+    context \
     yield \
     mutex \
     cond
