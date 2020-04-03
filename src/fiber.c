@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -25,14 +24,14 @@
 #define PRIORITY 16
 #define TIME_QUANTUM 50000
 
-/* user_level Thread Control Block (TCB) */
+/* user_level thread Control Block (TCB) */
 struct _tcb_internal {
-    fiber_t tid;         /* Thread ID            */
-    fiber_status status; /* Thread Status        */
-    ucontext_t context;  /* Thread Contex        */
-    uint priority;       /* Thread Priority      */
-    list_node node;      /* Thread Node in Queue */
-    char stack[1];       /* Thread Stack pointer */
+    fiber_t tid;         /* thread ID            */
+    fiber_status status; /* thread status        */
+    ucontext_t context;  /* thread contex        */
+    uint priority;       /* thread priority      */
+    list_node node;      /* thread node in Queue */
+    char stack[1];       /* thread stack pointer */
 };
 
 #define GET_TCB(ptr) \
@@ -41,7 +40,7 @@ struct _tcb_internal {
 /* user level thread queue */
 static list_node thread_queue[PRIORITY];
 
-/* current user level Thread context (for user level thread only) */
+/* current user level thread context (for user level thread only) */
 static list_node *currefiber_node[K_THREAD_MAX];
 
 /* kernel thread context */
