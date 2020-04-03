@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -14,6 +15,8 @@ static void func(void *data)
         for (int j = 0; j < 8; ++j)
             printf("%d ", ++g_val_array[j]);
         printf("\n");
+        /* recursive locks are not allowed */
+        assert(fiber_mutex_lock(&mtx) == -1);
         fiber_mutex_unlock(&mtx);
     }
 }

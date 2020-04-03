@@ -63,6 +63,10 @@ static sig_semaphore sigsem_thread[U_THREAD_MAX];
 static struct itimerval time_quantum;
 static struct itimerval zero_timer = {0};
 
+#ifndef unlikely
+#define unlikely(x) __builtin_expect((x), 0)
+#endif
+
 static inline bool is_queue_empty(list_node *q)
 {
     return (bool) (q->prev == q) && (q->next == q);
@@ -370,6 +374,12 @@ int fiber_mutex_init(fiber_mutex_t *mutex)
 int fiber_mutex_lock(fiber_mutex_t *mutex)
 {
     uint k_tid = (uint) syscall(SYS_gettid);
+
+    /* avoid recursive locks */
+    if (unlikely(mutex->owner ==
+                 GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK])))
+        return -1;
+
     /* Use "test-and-set" atomic operation to acquire the mutex lock */
     while (__atomic_test_and_set(&mutex->lock, __ATOMIC_ACQUIRE)) {
         enqueue(&mutex->wait_list, cur_thread_node[k_tid & K_CONTEXT_MASK]);
