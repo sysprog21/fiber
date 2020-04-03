@@ -316,12 +316,10 @@ static void k_thread_exec_func(void *arg)
     _tcb *run_tcb = NULL;
 
     /* timer and signal for user-level thread scheduling */
-    struct sigaction sched_handler;
-
-    /* set signal handler to invoke scheduler */
-    memset(&sched_handler, 0, sizeof(sched_handler));
-    sched_handler.sa_flags = SA_SIGINFO;
-    sched_handler.sa_handler = &schedule;
+    struct sigaction sched_handler = {
+        .sa_flags = SA_SIGINFO,
+        .sa_handler = &schedule, /* set signal handler to call scheduler */
+    };
     sigaction(SIGPROF, &sched_handler, NULL);
 
     setitimer(ITIMER_PROF, &time_quantum, NULL);
