@@ -43,7 +43,7 @@ static list_node thread_queue[PRIORITY];
 /* current user-level thread context */
 static list_node *cur_thread_node[K_THREAD_MAX];
 
-/* kernel thread context */
+/* kernel-level (or native) thread context */
 static ucontext_t context_main[K_THREAD_MAX];
 
 /* number of active threads */
@@ -62,8 +62,6 @@ static sig_semaphore sigsem_thread[U_THREAD_MAX];
 
 static struct itimerval time_quantum;
 static struct itimerval zero_timer = {0};
-
-static int sched = 0;
 
 static inline bool is_queue_empty(list_node *q)
 {
@@ -147,7 +145,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
                 return -1;
             }
 
-            /* invoke the clone system call to create a kernel thread */
+            /* invoke the clone system call to create a native thread */
             if (-1 == clone((int (*)(void *)) k_thread_exec_func,
                             (char *) stack + _THREAD_STACK,
                             SIGCHLD | CLONE_SIGHAND | CLONE_VM | CLONE_PTRACE,
@@ -267,10 +265,6 @@ static void schedule()
 
     cur_tcb->status = SUSPENDED;
 
-    /* FIXME: Multilevel Feedback Queues (MLFQ) is broken */
-    if (MLFQ == sched && cur_tcb->prio < PRIORITY - 1)
-        ++cur_tcb->prio;
-
     enqueue(thread_queue + cur_tcb->prio,
             cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
@@ -306,7 +300,7 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     swapcontext(&u_thread->context, &context_main[k_tid & K_CONTEXT_MASK]);
 }
 
-/* run kernel level thread function */
+/* run kernel-level (or native) thread function */
 static void k_thread_exec_func(void *arg)
 {
     (void) arg;

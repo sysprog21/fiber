@@ -21,7 +21,6 @@ typedef enum {
 
 typedef enum {
     RR = 0, /**< round-robin */
-    MLFQ,   /**< multi-level feedback queue */
 } fiber_sched_policy;
 
 /* user_level thread control block (TCB) */
