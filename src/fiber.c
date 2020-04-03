@@ -24,7 +24,7 @@
 #define PRIORITY 16
 #define TIME_QUANTUM 50000
 
-/* user_level thread Control Block (TCB) */
+/* user-level thread control block (TCB) */
 struct _tcb_internal {
     fiber_t tid;         /* thread ID            */
     fiber_status status; /* thread status        */
@@ -37,10 +37,10 @@ struct _tcb_internal {
 #define GET_TCB(ptr) \
     ((_tcb *) ((char *) (ptr) - (unsigned long long) (&((_tcb *) 0)->node)))
 
-/* user level thread queue */
+/* user-level thread queue */
 static list_node thread_queue[PRIORITY];
 
-/* current user level thread context (for user level thread only) */
+/* current user-level thread context */
 static list_node *currefiber_node[K_THREAD_MAX];
 
 /* kernel thread context */
@@ -57,18 +57,16 @@ typedef struct {
     unsigned long *val;
 } sig_semaphore;
 
-/* global semaphore for user level thread */
+/* global semaphore for user-level thread */
 static sig_semaphore sigsem_thread[U_THREAD_MAX];
 
-/* timer and signal for user level thread scheduling */
+/* timer and signal for user-level thread scheduling */
 static struct sigaction sched_handler;
 
 static struct itimerval time_quantum;
 static struct itimerval zero_timer = {0};
 
 static int sched = 0;
-
-/* Linked List Operations */
 
 static inline bool is_queue_empty(list_node *q)
 {
@@ -97,8 +95,9 @@ static inline bool dequeue(list_node *q, list_node **node)
     return true;
 }
 
-/* Fiber Operation */
+/* Fiber internals */
 
+/* FIXME: avoid the use of global variables */
 static int thread_nums = 0;
 
 int fiber_init(int num)
@@ -132,6 +131,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     /* create a TCB for the new thread */
     _tcb *thread = (_tcb *) malloc(sizeof(_tcb) + 1 + _THREAD_STACK);
 
+    /* prepare for first user-level thread */
     if (0 == user_thread_num) {
         /* Initialize time quantum */
         time_quantum.it_value.tv_sec = 0;
@@ -177,7 +177,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     sigsem_thread[thread->tid].val = NULL;
     sem_init(&(sigsem_thread[thread->tid].semaphore), 0, 0);
 
-    /* create a context for this user level thread */
+    /* create a context for this user-level thread */
     if (-1 == getcontext(&thread->context)) {
         perror("Failed to get uesr context!");
         return -1;
@@ -193,7 +193,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     makecontext(&thread->context, (void (*)(void)) & u_thread_exec_func, 3,
                 start_func, arg, thread);
 
-    /* add newly created thread to the user level thread run queue */
+    /* add newly created thread to the user-level thread run queue */
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
         ;
 
@@ -203,7 +203,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     return 0;
 }
 
-/* give CPU pocession to other user level threads voluntarily */
+/* give CPU pocession to other user-level threads voluntarily */
 int fiber_yield()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
@@ -226,7 +226,7 @@ int fiber_yield()
 /* wait for thread termination */
 int fiber_join(fiber_t thread, void **value_ptr)
 {
-    /* do P() in thread semaphore until the certain user level thread is done */
+    /* do P() in thread semaphore until the certain user-level thread is done */
     sem_wait(&(sigsem_thread[thread].semaphore));
     /* get the value's location passed to fiber_exit */
     if (value_ptr && sigsem_thread[thread].val)
@@ -259,7 +259,7 @@ void fiber_exit(void *retval)
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
 
-/* schedule the user level threads */
+/* schedule the user-level threads */
 static void schedule()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
@@ -281,7 +281,7 @@ static void schedule()
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
 
-/* start user level thread wrapper function */
+/* start user-level thread wrapper function */
 static void u_thread_exec_func(void (*thread_func)(void *),
                                void *arg,
                                _tcb *thread)
@@ -325,8 +325,8 @@ static void k_thread_exec_func(void *arg)
 
     setitimer(ITIMER_PROF, &time_quantum, NULL);
 
-    /* obtain and run a user level thread from the user level thread queue,
-     * until no available user level thread
+    /* obtain and run a user-level thread from the user-level thread queue,
+     * until no available user-level thread
      */
     while (1) {
         while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
@@ -346,8 +346,9 @@ static void k_thread_exec_func(void *arg)
          * fiber_exit()
          */
         if (TERMINATED == run_tcb->status || FINISHED == run_tcb->status) {
-            /* do V() in thread semaphore implies current user level thread is
-             * done */
+            /* do V() in thread semaphore implies that current user-level
+	     * thread is done.
+	     */
             sem_post(&(sigsem_thread[run_tcb->tid].semaphore));
             free(run_tcb);
             user_thread_num--;
@@ -359,8 +360,6 @@ static void k_thread_exec_func(void *arg)
         swapcontext(&context_main[k_tid & K_CONTEXT_MASK], &(run_tcb->context));
     }
 }
-
-/* Mutual Exclusive Lock */
 
 /* initialize the mutex lock */
 int fiber_mutex_init(fiber_mutex_t *mutex)
@@ -418,8 +417,6 @@ int fiber_mutex_destroy(fiber_mutex_t *mutex)
     (void) mutex;
     return 0;
 }
-
-/* Condition Variable */
 
 /* initial condition variable */
 int fiber_cond_init(fiber_cond_t *condvar)

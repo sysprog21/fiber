@@ -5,7 +5,7 @@
 
 typedef uint fiber_t;
 
-/* Task Linked List */
+/* Task linked list */
 typedef struct list_node {
     struct list_node *next, *prev;
 } list_node;
@@ -24,7 +24,7 @@ typedef enum {
     MLFQ,   /**< multi-level feedback queue */
 } fiber_sched_policy;
 
-/* user_level Thread Control Block (TCB) */
+/* user_level thread control block (TCB) */
 typedef struct _tcb_internal _tcb;
 
 typedef struct {
