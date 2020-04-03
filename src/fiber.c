@@ -60,9 +60,6 @@ typedef struct {
 /* global semaphore for user-level thread */
 static sig_semaphore sigsem_thread[U_THREAD_MAX];
 
-/* timer and signal for user-level thread scheduling */
-static struct sigaction sched_handler;
-
 static struct itimerval time_quantum;
 static struct itimerval zero_timer = {0};
 
@@ -317,7 +314,10 @@ static void k_thread_exec_func(void *arg)
     list_node *run_node = NULL;
     _tcb *run_tcb = NULL;
 
-    /* Set Signal Handler to Call Scheduler */
+    /* timer and signal for user-level thread scheduling */
+    struct sigaction sched_handler;
+
+    /* set signal handler to invoke scheduler */
     memset(&sched_handler, 0, sizeof(sched_handler));
     sched_handler.sa_flags = SA_SIGINFO;
     sched_handler.sa_handler = &schedule;
