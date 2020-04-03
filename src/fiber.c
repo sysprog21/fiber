@@ -20,9 +20,9 @@
 #define _THREAD_STACK 1024 * 32
 #define U_THREAD_MAX 16
 #define K_THREAD_MAX 4
-#define K_CONTEXT_MASK 0b11
+#define K_CONTEXT_MASK 0b11 /* bitmask for native thread ID */
 #define PRIORITY 16
-#define TIME_QUANTUM 50000
+#define TIME_QUANTUM 50000 /* in us */
 
 /* user-level thread control block (TCB) */
 struct _tcb_internal {
