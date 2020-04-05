@@ -1,11 +1,10 @@
 # fiber: A User Space Threading Library
 
 Fiber is a lightweight thread library with M:N mapping between user-level
-thread and kernel-level (or native) thread. The implementation is dedicated
-to GNU/Linux-based systems.
+thread (ULT) and Linux native thread (or kernel-level thread, KLT).
 
 ## Features
-* Preemptive user threads
+* Preemptive user-level threads
 * Familiar threading concepts are available
   - Mutexes
   - Condition varialbles

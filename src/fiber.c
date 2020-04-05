@@ -30,7 +30,7 @@ struct _tcb_internal {
     fiber_status status; /* thread status        */
     ucontext_t context;  /* thread contex        */
     uint prio;           /* thread priority      */
-    list_node node;      /* thread node in Queue */
+    list_node node;      /* thread node in queue */
     char stack[1];       /* thread stack pointer */
 };
 
@@ -43,7 +43,7 @@ static list_node thread_queue[PRIORITY];
 /* current user-level thread context */
 static list_node *cur_thread_node[K_THREAD_MAX];
 
-/* kernel-level (or native) thread context */
+/* native thread context */
 static ucontext_t context_main[K_THREAD_MAX];
 
 /* number of active threads */
@@ -55,11 +55,12 @@ static uint _spinlock = 0;
 typedef struct {
     sem_t semaphore;
     unsigned long *val;
-} sig_semaphore;
+} sig_sem;
 
 /* global semaphore for user-level thread */
-static sig_semaphore sigsem_thread[U_THREAD_MAX];
+static sig_sem sigsem_thread[U_THREAD_MAX];
 
+/* timer management */
 static struct itimerval time_quantum;
 static struct itimerval zero_timer = {0};
 
@@ -304,7 +305,7 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     swapcontext(&u_thread->context, &context_main[k_tid & K_CONTEXT_MASK]);
 }
 
-/* run kernel-level (or native) thread function */
+/* run native thread (or kernel-level thread) function */
 static void k_thread_exec_func(void *arg)
 {
     (void) arg;
