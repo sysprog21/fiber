@@ -18,6 +18,7 @@ include common.mk
 
 CFLAGS = -I./include
 CFLAGS += -std=gnu99 -Wall -W
+CFLAGS += -DUNUSED="__attribute__((unused))"
 LDFLAGS = -lpthread
 
 TESTS_OK = $(TESTS:=.ok)

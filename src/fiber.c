@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
-#include <sys/wait.h>
 #include <ucontext.h>
 #include <unistd.h>
 
@@ -90,8 +89,7 @@ static inline bool dequeue(list_node *q, list_node **node)
     q->next = q->next->next;
     q->next->prev = q;
 
-    (*node)->next = NULL;
-    (*node)->prev = NULL;
+    (*node)->next = (*node)->prev = NULL;
     return true;
 }
 
@@ -104,7 +102,7 @@ int fiber_init(int num)
 {
     if (num <= 0)
         return -1;
-    thread_nums = num;
+    thread_nums = num; /* FIXME: validate the number of native threads */
     return 0;
 }
 
@@ -139,13 +137,12 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
         time_quantum.it_interval.tv_sec = 0;
         time_quantum.it_interval.tv_usec = TIME_QUANTUM;
 
-        thread_queue->prev = thread_queue;
-        thread_queue->next = thread_queue;
+        thread_queue->prev = thread_queue->next = thread_queue;
 
         for (int i = 0; i < thread_nums; i++) {
             /* allocate space for the newly created thread on stack */
             void *stack = (void *) malloc(_THREAD_STACK);
-            if (NULL == stack) {
+            if (!stack) {
                 perror("Failed to allocate space for stack!");
                 return -1;
             }
@@ -306,9 +303,8 @@ static void u_thread_exec_func(void (*thread_func)(void *),
 }
 
 /* run native thread (or kernel-level thread) function */
-static void k_thread_exec_func(void *arg)
+static void k_thread_exec_func(void *arg UNUSED)
 {
-    (void) arg;
     uint k_tid = (uint) syscall(SYS_gettid);
 
     list_node *run_node = NULL;
@@ -415,10 +411,9 @@ int fiber_mutex_unlock(fiber_mutex_t *mutex)
 }
 
 /* destory the mutex lock */
-int fiber_mutex_destroy(fiber_mutex_t *mutex)
+int fiber_mutex_destroy(fiber_mutex_t *mutex UNUSED)
 {
     /* FIXME: deallocate */
-    (void) mutex;
     return 0;
 }
 
@@ -482,9 +477,8 @@ int fiber_cond_wait(fiber_cond_t *condvar, fiber_mutex_t *mutex)
 }
 
 /* destory condition variable */
-int fiber_cond_destroy(fiber_cond_t *condvar)
+int fiber_cond_destroy(fiber_cond_t *condvar UNUSED)
 {
     /* FIXME: deallocate */
-    (void) condvar;
     return 0;
 }
