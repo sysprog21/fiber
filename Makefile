@@ -7,7 +7,12 @@ TESTS := $(addprefix tests/test-,$(TESTS))
 deps := $(TESTS:%=%.o.d)
 
 .PHONY: all check clean
-all: $(TESTS)
+GIT_HOOKS := .git/hooks/applied
+all: $(GIT_HOOKS) $(TESTS)
+
+$(GIT_HOOKS):
+	@scripts/install-git-hooks
+	@echo
 
 include common.mk
 
