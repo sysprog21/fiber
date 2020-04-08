@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-CPPCHECK_suppresses="--suppress=missingIncludeSystem \
-		     --suppress=unusedFunction:src/fiber.c"
-CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses ."
+CPPCHECK_suppress="--suppress=missingInclude \
+                   --suppress=unusedFunction:src/fiber.c \
+                   --inline-suppr"
+CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppress ."
 
 RETURN=0
 CLANG_FORMAT=$(which clang-format)
