@@ -127,7 +127,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     }
 
     /* create a TCB for the new thread */
-    _tcb *thread = (_tcb *) malloc(sizeof(_tcb) + 1 + _THREAD_STACK);
+    _tcb *thread = malloc(sizeof(_tcb) + 1 + _THREAD_STACK);
 
     /* prepare for first user-level thread */
     if (0 == user_thread_num) {
@@ -141,7 +141,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
 
         for (int i = 0; i < thread_nums; i++) {
             /* allocate space for the newly created thread on stack */
-            void *stack = (void *) malloc(_THREAD_STACK);
+            void *stack = malloc(_THREAD_STACK);
             if (!stack) {
                 perror("Failed to allocate space for stack!");
                 return -1;
@@ -243,8 +243,7 @@ void fiber_exit(void *retval)
     /* When this thread finished, delete TCB and yield CPU control */
     user_thread_num--;
 
-    sigsem_thread[currefiber_id].val =
-        (unsigned long *) malloc(sizeof(unsigned long));
+    sigsem_thread[currefiber_id].val = malloc(sizeof(unsigned long));
     memcpy(sigsem_thread[currefiber_id].val, retval, sizeof(unsigned long));
 
     while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))

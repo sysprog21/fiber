@@ -45,10 +45,10 @@ int main()
     }
 
     /* Allocate a new stacks */
-    ping_ctx.uc_stack.ss_sp = (char *) malloc(SIGSTKSZ);
+    ping_ctx.uc_stack.ss_sp = malloc(SIGSTKSZ);
     ping_ctx.uc_stack.ss_size = SIGSTKSZ;
 
-    pong_ctx.uc_stack.ss_sp = (char *) malloc(SIGSTKSZ);
+    pong_ctx.uc_stack.ss_sp = malloc(SIGSTKSZ);
     pong_ctx.uc_stack.ss_size = SIGSTKSZ;
 
     /* Set the successor context */
