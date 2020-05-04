@@ -4,3 +4,4 @@ tests/*.ok
 tests/test-cond
 tests/test-mutex
 tests/test-yield
+tests/test-context
