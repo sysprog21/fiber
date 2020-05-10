@@ -20,7 +20,7 @@ setitimer(ITIMER_PROF, &time_quantum, NULL)
 When the timer expires, signal `SIGPROF` is sent to the process.
 `sigaction()` would invoke the scheduling routine `schedule()` to run, which
 chooses a thread from a run queue to run. The scheduler maintains a run queue.
-The new created threads are pushedt into the end of the queue. The first thread
+The new created threads are pushed into the end of the queue. The first thread
 in the head of the queue is the thread currently running. Each time the
 scheduler receives signal `SIGPROF`, it interrupts the running thread at the
 head by pushing this thread into the end of the queue. In addition, it swaps
