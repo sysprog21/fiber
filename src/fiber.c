@@ -311,7 +311,6 @@ static void k_thread_exec_func(void *arg UNUSED)
 
     /* timer and signal for user-level thread scheduling */
     struct sigaction sched_handler = {
-        .sa_flags = SA_SIGINFO,
         .sa_handler = &schedule, /* set signal handler to call scheduler */
     };
     sigaction(SIGPROF, &sched_handler, NULL);
