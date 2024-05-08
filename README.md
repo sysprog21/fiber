@@ -7,7 +7,7 @@ thread (ULT) and Linux native thread (or kernel-level thread, KLT).
 * Preemptive user-level threads
 * Familiar threading concepts are available
   - Mutexes
-  - Condition varialbles
+  - Condition variables
 
 ## Implementation Details
 
