@@ -21,7 +21,7 @@
 #define K_THREAD_MAX 4
 #define K_CONTEXT_MASK 0b11 /* bitmask for native thread ID */
 #define PRIORITY 16
-#define TIME_QUANTUM 50000 /* in us */
+#define TIME_SLICE 50000 /* in us */
 
 /* user-level thread control block (TCB) */
 struct _tcb_internal {
@@ -62,7 +62,7 @@ typedef struct {
 static sig_sem sigsem_thread[U_THREAD_MAX];
 
 /* timer management */
-static struct itimerval time_quantum;
+static struct itimerval timeslice;
 static struct itimerval zero_timer = {0};
 
 #ifndef unlikely
@@ -138,7 +138,7 @@ void fiber_destroy()
     sleep(1);
 }
 
-static void k_thread_exec_func(void *arg);
+static int k_thread_exec_func(void *arg);
 static void u_thread_exec_func(void (*thread_func)(void *),
                                void *arg,
                                _tcb *thread);
@@ -161,11 +161,11 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
 
     /* prepare for first user-level thread */
     if (0 == user_thread_num) {
-        /* Initialize time quantum */
-        time_quantum.it_value.tv_sec = 0;
-        time_quantum.it_value.tv_usec = TIME_QUANTUM;
-        time_quantum.it_interval.tv_sec = 0;
-        time_quantum.it_interval.tv_usec = TIME_QUANTUM;
+        /* Initialize timeslice */
+        timeslice.it_value.tv_sec = 0;
+        timeslice.it_value.tv_usec = TIME_SLICE;
+        timeslice.it_interval.tv_sec = 0;
+        timeslice.it_interval.tv_usec = TIME_SLICE;
 
         thread_queue->prev = thread_queue->next = thread_queue;
 
@@ -179,8 +179,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
             }
 
             /* invoke the clone system call to create a native thread */
-            if (-1 == clone((int (*)(void *)) k_thread_exec_func,
-                            (char *) stack + _THREAD_STACK,
+            if (-1 == clone(k_thread_exec_func, (char *) stack + _THREAD_STACK,
                             SIGCHLD | CLONE_SIGHAND | CLONE_VM | CLONE_PTRACE,
                             NULL)) {
                 perror("Failed to invoke clone system call.");
@@ -199,8 +198,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
     thread->prio = 0;
 
     /* set node in thread run queue */
-    thread->node.next = NULL;
-    thread->node.prev = NULL;
+    thread->node.next = thread->node.prev = NULL;
 
     /* initialize sigsem_thread */
     sigsem_thread[thread->tid].val = NULL;
@@ -327,7 +325,7 @@ static void u_thread_exec_func(void (*thread_func)(void *),
 }
 
 /* run native thread (or kernel-level thread) function */
-static void k_thread_exec_func(void *arg UNUSED)
+static int k_thread_exec_func(void *arg UNUSED)
 {
     uint k_tid = (uint) syscall(SYS_gettid);
 
@@ -340,7 +338,7 @@ static void k_thread_exec_func(void *arg UNUSED)
     };
     sigaction(SIGPROF, &sched_handler, NULL);
 
-    setitimer(ITIMER_PROF, &time_quantum, NULL);
+    setitimer(ITIMER_PROF, &timeslice, NULL);
 
     /* obtain and run a user-level thread from the user-level thread queue,
      * until no available user-level thread
@@ -351,8 +349,8 @@ static void k_thread_exec_func(void *arg UNUSED)
         if (!dequeue(thread_queue, &run_node)) {
             spin_unlock(&_spinlock);
 
-            setitimer(ITIMER_PROF, &zero_timer, &time_quantum);
-            return;
+            setitimer(ITIMER_PROF, &zero_timer, &timeslice);
+            return 0;
         }
         spin_unlock(&_spinlock);
 
@@ -375,6 +373,7 @@ static void k_thread_exec_func(void *arg UNUSED)
         cur_thread_node[k_tid & K_CONTEXT_MASK] = run_node;
         swapcontext(&context_main[k_tid & K_CONTEXT_MASK], &(run_tcb->context));
     }
+    return 0;
 }
 
 /* initialize the mutex lock */

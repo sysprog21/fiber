@@ -186,3 +186,4 @@ mutex
 sem
 cond
 condvar
+timeslice

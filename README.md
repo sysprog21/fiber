@@ -14,7 +14,7 @@ thread (ULT) and Linux native thread (or kernel-level thread, KLT).
 The preemptive scheduler is implemented through timer and signal functions.
 In `k_thread_exec_func()` function, a timer is initiated through the following:
 ```c
-setitimer(ITIMER_PROF, &time_quantum, NULL)
+setitimer(ITIMER_PROF, &timeslice, NULL)
 ```
 
 When the timer expires, signal `SIGPROF` is sent to the process.
