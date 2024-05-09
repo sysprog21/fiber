@@ -48,6 +48,8 @@ static ucontext_t context_main[K_THREAD_MAX];
 /* number of active threads */
 static int user_thread_num = 0;
 
+static __thread int preempt_disable_count = 0;
+
 /* global spinlock for critical section _queue */
 static uint _spinlock = 0;
 
@@ -66,6 +68,30 @@ static struct itimerval zero_timer = {0};
 #ifndef unlikely
 #define unlikely(x) __builtin_expect((x), 0)
 #endif
+
+/* diable schedule of native thread */
+static inline void preempt_disable()
+{
+    __atomic_add_fetch(&preempt_disable_count, 1, __ATOMIC_ACQUIRE);
+}
+
+static inline void preempt_enable()
+{
+    __atomic_sub_fetch(&preempt_disable_count, 1, __ATOMIC_RELEASE);
+}
+
+static inline void spin_lock(uint *lock)
+{
+    preempt_disable();
+    while (__atomic_test_and_set(lock, __ATOMIC_ACQUIRE))
+        ;
+}
+
+static inline void spin_unlock(uint *lock)
+{
+    __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
+    preempt_enable();
+}
 
 static inline bool is_queue_empty(list_node *q)
 {
@@ -128,6 +154,10 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
 
     /* create a TCB for the new thread */
     _tcb *thread = malloc(sizeof(_tcb) + 1 + _THREAD_STACK);
+    if (!thread) {
+        perror("Failed to allocate space for thread!");
+        return -1;
+    }
 
     /* prepare for first user-level thread */
     if (0 == user_thread_num) {
@@ -144,6 +174,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
             void *stack = malloc(_THREAD_STACK);
             if (!stack) {
                 perror("Failed to allocate space for stack!");
+                free(thread);
                 return -1;
             }
 
@@ -153,6 +184,7 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
                             SIGCHLD | CLONE_SIGHAND | CLONE_VM | CLONE_PTRACE,
                             NULL)) {
                 perror("Failed to invoke clone system call.");
+                free(thread);
                 free(stack);
                 return -1;
             }
@@ -191,11 +223,10 @@ int fiber_create(fiber_t *tid, void (*start_func)(void *), void *arg)
                 start_func, arg, thread);
 
     /* add newly created thread to the user-level thread run queue */
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
 
     enqueue(thread_queue + thread->prio, &thread->node);
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
 
     return 0;
 }
@@ -205,18 +236,17 @@ int fiber_yield()
 {
     uint k_tid = (uint) syscall(SYS_gettid);
     _tcb *cur_tcb = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
 
     if (RUNNING == cur_tcb->status) {
         cur_tcb->status = SUSPENDED;
         enqueue(thread_queue + cur_tcb->prio,
                 cur_thread_node[k_tid & K_CONTEXT_MASK]);
-        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+        spin_unlock(&_spinlock);
 
         swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
     } else
-        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+        spin_unlock(&_spinlock);
     return 0;
 }
 
@@ -246,11 +276,10 @@ void fiber_exit(void *retval)
     sigsem_thread[currefiber_id].val = malloc(sizeof(unsigned long));
     memcpy(sigsem_thread[currefiber_id].val, retval, sizeof(unsigned long));
 
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
     enqueue(thread_queue + cur_tcb->prio,
             cur_thread_node[k_tid & K_CONTEXT_MASK]);
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
 
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -261,15 +290,14 @@ static void schedule()
     uint k_tid = (uint) syscall(SYS_gettid);
     _tcb *cur_tcb = GET_TCB(cur_thread_node[k_tid & K_CONTEXT_MASK]);
 
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    if (preempt_disable_count)
+        return;
 
+    spin_lock(&_spinlock);
     cur_tcb->status = SUSPENDED;
-
     enqueue(thread_queue + cur_tcb->prio,
             cur_thread_node[k_tid & K_CONTEXT_MASK]);
-
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
 
     swapcontext(&(cur_tcb->context), &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -282,7 +310,6 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     uint k_tid = 0;
     _tcb *u_thread = thread;
 
-    u_thread->status = RUNNING;
     thread_func(arg);
     u_thread->status = FINISHED;
 
@@ -291,12 +318,10 @@ static void u_thread_exec_func(void (*thread_func)(void *),
     u_thread->context.uc_link = &context_main[k_tid & K_CONTEXT_MASK];
 
     /* When this thread finished, delete TCB and yield CPU control */
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
     enqueue(thread_queue + u_thread->prio,
             cur_thread_node[k_tid & K_CONTEXT_MASK]);
-
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
 
     swapcontext(&u_thread->context, &context_main[k_tid & K_CONTEXT_MASK]);
 }
@@ -321,16 +346,15 @@ static void k_thread_exec_func(void *arg UNUSED)
      * until no available user-level thread
      */
     while (1) {
-        while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-            ;
+        spin_lock(&_spinlock);
 
         if (!dequeue(thread_queue, &run_node)) {
-            __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+            spin_unlock(&_spinlock);
 
             setitimer(ITIMER_PROF, &zero_timer, &time_quantum);
             return;
         }
-        __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+        spin_unlock(&_spinlock);
 
         run_tcb = GET_TCB(run_node);
 
@@ -399,10 +423,9 @@ int fiber_mutex_unlock(fiber_mutex_t *mutex)
     }
     cur_tcb = GET_TCB(next_node);
     cur_tcb->prio = 0;
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
     enqueue(thread_queue + cur_tcb->prio, next_node);
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
     __atomic_store_n(&mutex->lock, 0, __ATOMIC_RELEASE);
     mutex->owner = NULL;
     return 0;
@@ -450,10 +473,9 @@ int fiber_cond_signal(fiber_cond_t *condvar)
 
     cur_tcb = GET_TCB(next_node);
     cur_tcb->prio = 0;
-    while (__atomic_test_and_set(&_spinlock, __ATOMIC_ACQUIRE))
-        ;
+    spin_lock(&_spinlock);
     enqueue(thread_queue + cur_tcb->prio, next_node);
-    __atomic_store_n(&_spinlock, 0, __ATOMIC_RELEASE);
+    spin_unlock(&_spinlock);
 
     return 0;
 }
