@@ -65,6 +65,9 @@ int main()
         exit(EXIT_FAILURE);
     }
 
+    free(ping_ctx.uc_stack.ss_sp);
+    free(pong_ctx.uc_stack.ss_sp);
+
     printf("main: exiting\n");
     return 0;
 }
